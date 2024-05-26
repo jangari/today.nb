@@ -26,11 +26,11 @@ Note is created using `YYYY-MM-DD` as both filename and note title by default. B
 
 ## Examples
 
-`nb today`             Create or open today's note
-`nb today -1`          Create or open yesterday's note
-`nb today -2`          Create or open the note for two days ago
-`nb today --no-open`   Create today's note without opening it
-`nb today +1 -n`       Create tomorrow's note without opening it
+`nb today             # Create or open today's note`
+`nb today -1          # Create or open yesterday's note`
+`nb today -2          # Create or open the note for two days ago`
+`nb today --no-open   # Create today's note without opening it`
+`nb today +1 -n       # Create tomorrow's note without opening it`
 
 ## See Also
 
