@@ -10,85 +10,179 @@
 #   https://github.com/xwmx/nb
 ###############################################################################
 
-# Add the new subcommand name with `_subcommands add <name>`.
+# Add the new subcommand names with `_subcommands add <name>`.
 _subcommands add "today"
 _subcommands add "day"
+_subcommands add "td"
 _subcommands alias "today" "day" 
+_subcommands alias "today" "td" 
 
 # Define help and usage text with `_describe_<subcommand>()` and point aliases at the same.
 _describe_today() {
-  cat <<HEREDOC
+    cat <<HEREDOC
 $(_color_primary "Usage"):
-  ${_ME} today [<offset>] [--no-open|-n]
+  ${_ME} today [<offset>] [--no-open | --path | --date <datestr>]
+
+$(_color_primary "Arguments"):
+  [<offset>]                  Specifies the offset from the current date. If
+                              provided, the note will be created for the date
+                              that is <offset> days away from the current date.
+                              Use negative numbers for dates in the past and
+                              positive numbers for future dates. For example,
+                              -1 represents yesterday, +1 represents tomorrow,
+                              -2 represents two days ago, and so on. If not
+                              provided, the note will be created for the current date.
+
+
+$(_color_primary "Options"):
+  -n, --no-open               Do not open after creating.
+  -p, --path, --paths         Return the note path instead of opening. Useful
+                              for integration with external editors. Implies \`--no-open\`.
+  -d, --date <datestr>        Create/open note for date represented by <datestr>.
+                              Requires GNU date to be installed and its path
+                              provided in \`NB_TODAY_DATE_CMD\`. This option overrides
+                              any provided \`<offset>\`. See Examples section.
 
 $(_color_primary "Description"):
-  Create today's note if it doesn't already exist, and opens it if it does.
-  If an offset is provided (e.g., -1 for yesterday, +1 for tomorrow), the note for the specified day is created or opened.
-  Use the --no-open or -n flag to create the note without opening it.
-  Note is created using YYYY-MM-DD as both filename and note title by default. Both patterns can be overridden by setting the NB_TODAY_FILENAME_PATTERN and NB_TODAY_TITLE_PATTERN environment variables in \`~/.nbrc\` to the desired strftime patterns.
+  Create, open, or return the paths for notes based on dates, such as today by default, or with an offset, a number of days before of after today, or for specific dates expressed by a string.
+
+$(_color_primary "Environment Variables"):
+  NB_TODAY_DATE_CMD           Specifies the path to the \`date\` command to use for
+                              date calculations. If not set, the script will use
+                              the system's default \`date\` command. On MacOS, the builtin
+                              \`date\` command does not support the \`--date\` option.
+                              GNU Date is recommended.
+  NB_TODAY_FILENAME_PATTERN   Specifies the strftime pattern to use for generating
+                              the filename of today's note. If not set, the default
+                              pattern is '%Y-%m-%d', yielding note filenames such as
+                              '2024-05-01.md'.
+  NB_TODAY_TITLE_PATTERN      Specifies the strftime pattern to use for generating the
+                              title of daily notes. If not set, the default pattern
+                              is '%Y-%m-%d'.
+  NB_TODAY_FILE_PATH          Specifies the path relative to the notebook where daily
+                              notes should be saved. If not set, daily notes are saved
+                              to the notebooks' root.
 
 $(_color_primary "Examples"):
-  ${_ME} today                    Create or open today's note
-  ${_ME} today -1                 Create or open yesterday's note
-  ${_ME} today -2                 Create or open the note for two days ago
-  ${_ME} today --no-open          Create today's note without opening it
-  ${_ME} today +1 -n              Create tomorrow's note without opening it
+  ${_ME} today                Create or open today's note
+  ${_ME} today -1             Create or open yesterday's note
+  ${_ME} td -n +1             Create tomorrow's note without opening it
+  ${_ME} today -2 -p          (Create and) Print the path for the note for two days ago
+  ${_ME} today --no-open      Create today's note without opening it
+  ${_ME} day -d "+3week"      Create a note for the day 3 weeks after today
+  ${_ME} today -nd "June 20"  Create a note for June 20 without opening it
+  ${_ME} td -pd "last year"   (Create and) Print the path for the note for one year ago
+  ${_ME} sample:today +1      Create tomorrow's note in the \`sample\` notebook
 
 $(_color_primary "See Also"):
   man 3 strftime
+  gdate
 
 $(_color_primary "Aliases"):
   ${_ME} day
+  ${_ME} td
 HEREDOC
 }
 
-_describe_day() (_describe_today) # Aliased help doc
+_describe_day() (_describe_today)
 
 # Define the subcommand as a function, named with a leading underscore.
 _today() {
-  local _offset="${1:-+0}"  # Default to +0 (today) if no offset is provided
-  local _no_open=false
+    local _offset="+0"  # Default to +0 (today) if no offset is provided
+    local _no_open=false
+    local _return_path=false
+    local _custom_date=""
 
-  # Check for the --no-open flag
-  if [[ "${1:-}" == "--no-open" || "${1:-}" == "-n" ]]; then
-    _no_open=true
-    _offset="${2:-+0}"  # Adjust offset if the first argument is the flag
-  elif [[ "${2:-}" == "--no-open" || "${2:-}" == "-n" ]]; then
-    _no_open=true
-  fi
+    # Check for an empty argument and adjust if necessary
+    if [[ $# -eq 1 && -z "$1" ]]; then
+        shift
+    fi
 
-  # Determine if we're on macOS or Linux and set the appropriate date command
-  if date -v +1d > /dev/null 2>&1; then
-    # macOS/BSD date command
+    # Parse flags and offset
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --no-open|-n)
+                _no_open=true
+                shift
+                ;;
+            -p|--path|--paths)
+                _return_path=true
+                shift
+                ;;
+            --date|-d)
+                _custom_date="$2"
+                shift 2
+                ;;
+            -[0-9]*|+[0-9]*)
+                _offset="$1"
+                shift
+                ;;
+            -*)
+                printf "Unknown option: %s\n" "$1"
+                exit 1
+                ;;
+            *)
+                printf "Unknown argument: %s\n" "$1"
+                exit 1
+                ;;
+        esac
+    done
+
+    # Determine the date command based on the NB_TODAY_DATE_CMD environment variable
+    local _date_cmd="${NB_TODAY_DATE_CMD:-date}"
+
+    # Determine path for daily notes
+    local _today_path="${NB_TODAY_FILENAME_PATH:-.}"
+
+    # Determine extension to be used
+    local _today_ext="${NB_TODAY_FILE_EXT:-${NB_DEFAULT_EXTENSION:-md}}"
+    # Determine the target date and title
     local _target_date
-    _target_date=$(date -v"${_offset}d" ${NB_TODAY_FILENAME_PATTERN:-+%Y-%m-%d})
     local _target_title
-    _target_title=$(date -v"${_offset}d" ${NB_TODAY_TITLE_PATTERN:-+%Y-%m-%d})
-  else
-    # Linux/GNU date command
-    local _target_date
-    _target_date=$(date -d "${_offset} day" ${NB_TODAY_FILENAME_PATTERN:-+%Y-%m-%d})
-    local _target_title
-    _target_title=$(date -d "${_offset} day" ${NB_TODAY_TITLE_PATTERN:-+%Y-%m-%d})
-  fi
 
-  local _notebook_path
-  _notebook_path="$(_notebooks current --path)"
+    if [[ -n "${_custom_date}" ]]; then
+        if ! _target_date=$($_date_cmd -d "${_custom_date}" ${NB_TODAY_FILENAME_PATTERN:-+%Y-%m-%d} 2>/dev/null); then
+            echo "GNU date is required for custom date strings. If you have GNU date installed, set it using the \`NB_TODAY_DATE_CMD\` in your \`.nbrc\` file."
+            exit 1
+        fi
+        _target_title=$($_date_cmd -d "${_custom_date}" ${NB_TODAY_TITLE_PATTERN:-+%Y-%m-%d})
+    else
+        if $_date_cmd -v +1d > /dev/null 2>&1; then
+            # macOS/BSD date command
+            _target_date=$($_date_cmd -v"${_offset}d" ${NB_TODAY_FILENAME_PATTERN:-+%Y-%m-%d})
+            _target_title=$($_date_cmd -v"${_offset}d" ${NB_TODAY_TITLE_PATTERN:-+%Y-%m-%d})
+        else
+            # Linux/GNU date command
+            _target_date=$($_date_cmd -d "${_offset} day" ${NB_TODAY_FILENAME_PATTERN:-+%Y-%m-%d})
+            _target_title=$($_date_cmd -d "${_offset} day" ${NB_TODAY_TITLE_PATTERN:-+%Y-%m-%d})
+        fi
+    fi
 
-  local _target_filename
-  _target_filename="${_target_date}.md"
+    local _today_path="${NB_TODAY_FILE_PATH:-}"
+    _today_path=$(echo "${_today_path}" | sed 's/^[[:space:]\/]*//;s/[[:space:]\/]*$//')
 
-  local _target_path
-  _target_path="${_notebook_path}/${_target_filename}"
+    local _notebook_path
+    _notebook_path="$(_notebooks current --path)"
 
-  if [[ ! -e "${_target_path}" ]]; then
-    # Create the note with the title # YYYY-MM-DD
-    printf "# %s\n" "${_target_title}" | _add --filename "${_target_filename}"
-  fi
+    local _target_filename
+    _target_filename="${_target_date}.${_today_ext}"
 
-  # Open the note if --no-open is not set
-  if [[ "${_no_open}" == false ]]; then
-    _edit "${_target_filename}"
-  fi
+    local _target_path
+    _target_path="${_notebook_path}/${_today_path}${_today_path:+/}${_target_filename}"
+
+    if [[ ! -e "${_target_path}" ]]; then
+        # Create the note with the title # YYYY-MM-DD
+        printf "# %s\n" "${_target_title}" | _add "${_target_path}"
+    fi
+
+    # Return the path if --path or --paths is set
+    if [[ "${_return_path}" == true ]]; then
+        echo "${_target_path}"
+        exit 0
+    fi
+
+    # Open the note if --no_open is not set
+    if [[ "${_no_open}" == false ]]; then
+        _edit "${_target_path}"
+    fi
 }
-
