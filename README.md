@@ -1,4 +1,4 @@
-# today.nb-plugin
+# today.nb
 
 Open or create a day's note.
 
