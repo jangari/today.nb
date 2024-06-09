@@ -9,7 +9,7 @@ Author: Jangari <https://github.com/jangari>.
 ## Installation
 
 ```
-nb plugin install https://github.com/jangari/today.nb-plugin/blob/main/today.nb-plugin
+nb plugin install https://github.com/jangari/today.nb/blob/main/today.nb-plugin
 ```
 
 ## Usage
